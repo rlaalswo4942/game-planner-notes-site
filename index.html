@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>게임기획전문가</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎮</text></svg>">
+<style>
+:root { --bg: #f4f6fb; --ink: #1f2430; --sub: #5d6577; --accent: #5b5bd6; --line: #e3e7ef; --err: #c92a2a; color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--ink);
+  font-family: "Apple SD Gothic Neo", "Malgun Gothic", "Noto Sans KR", system-ui, sans-serif; padding: 16px; }
+form { background: #fff; border-radius: 18px; box-shadow: 0 6px 30px rgba(20,24,40,.10); padding: 28px 26px; width: min(380px, 100%); display: grid; gap: 12px; }
+h1 { margin: 0; font-size: 22px; } p { margin: 0; color: var(--sub); font-size: 14px; line-height: 1.5; }
+input { height: 48px; border: 1px solid var(--line); border-radius: 12px; padding: 0 14px; font: inherit; font-size: 17px; }
+input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+button { height: 48px; border: 0; border-radius: 12px; background: var(--accent); color: #fff; font: inherit; font-size: 16px; font-weight: 700; cursor: pointer; }
+button:disabled { opacity: .6; }
+.msg { min-height: 20px; font-size: 14px; color: var(--sub); } .msg.err { color: var(--err); }
+</style></head>
+<body>
+<form id="f" autocomplete="off">
+  <h1>🎮 게임기획전문가</h1>
+  <p>전달받은 입장 코드를 입력하세요. 한 번 입력하면 이 기기에서는 다시 묻지 않아요.</p>
+  <input id="code" type="password" placeholder="입장 코드" autocapitalize="off" autocorrect="off" spellcheck="false" required>
+  <button type="submit" id="go">들어가기</button>
+  <div class="msg" id="msg"></div>
+</form>
+<script>
+const SALT = "gameplanner-cert-v1-e4a15386", ITER = 200000;
+const $ = id => document.getElementById(id);
+function say(t, err) { $("msg").textContent = t; $("msg").className = "msg" + (err ? " err" : ""); }
+function db() {
+  return new Promise((res, rej) => { const r = indexedDB.open("gameplanner-cert-gate", 1); r.onupgradeneeded = () => r.result.createObjectStore("k"); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); });
+}
+async function idb(op, val) {
+  const d = await db();
+  return new Promise((res, rej) => { const st = d.transaction("k", op === "get" ? "readonly" : "readwrite").objectStore("k");
+    const q = op === "get" ? st.get("key") : op === "del" ? st.delete("key") : st.put(val, "key"); q.onsuccess = () => res(q.result); q.onerror = () => rej(q.error); });
+}
+async function fileId(rel) {
+  const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(SALT + rel));
+  return [...new Uint8Array(b)].map(x => x.toString(16).padStart(2, "0")).join("").slice(0, 24);
+}
+async function keyOk(key) {
+  const r = await fetch("enc/" + (await fileId("__check__")) + ".bin", { cache: "no-store" });
+  const buf = await r.arrayBuffer();
+  try { await crypto.subtle.decrypt({ name: "AES-GCM", iv: buf.slice(0, 12) }, key, buf.slice(12)); return true; } catch (e) { return false; }
+}
+async function enter() {
+  if (!("serviceWorker" in navigator)) { say("이 브라우저는 지원되지 않아요. 크롬·사파리·삼성 인터넷 최신 버전으로 열어 주세요.", true); return; }
+  await navigator.serviceWorker.register("sw.js");
+  await navigator.serviceWorker.ready;
+  location.replace("app/index.html" + location.hash);
+}
+$("f").addEventListener("submit", async e => {
+  e.preventDefault(); $("go").disabled = true; say("확인 중…");
+  try {
+    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode($("code").value.trim()), "PBKDF2", false, ["deriveKey"]);
+    const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: new TextEncoder().encode(SALT), iterations: ITER, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["decrypt"]);
+    if (!(await keyOk(key))) { say("코드가 맞지 않아요. 다시 확인해 주세요.", true); $("go").disabled = false; return; }
+    await idb("put", key); say("열고 있어요…"); await enter();
+  } catch (err) { say("열지 못했어요: " + err.message, true); $("go").disabled = false; }
+});
+(async () => {
+  try {
+    const k = await idb("get");
+    if (k && !location.search.includes("locked") && (await keyOk(k))) { say("열고 있어요…"); await enter(); }
+    else if (location.search.includes("locked")) say("입장 코드를 다시 입력해 주세요.");
+  } catch (e) {}
+})();
+</script>
+</body></html>
