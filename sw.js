@@ -1,5 +1,5 @@
 /* 공부노트: app/* 요청을 받아 enc/ 의 암호문을 복호화해 응답 */
-const SALT = "gameplanner-cert-v1-e4a15386";
+const SALT = "gameplanner-cert-v1-11a2a301";
 const SCOPE = new URL(self.registration.scope);
 const TYPES = { webp: "image/webp", gif: "image/gif", html: "text/html; charset=utf-8", js: "text/javascript; charset=utf-8", css: "text/css; charset=utf-8",
   jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", svg: "image/svg+xml", glb: "model/gltf-binary", txt: "text/plain; charset=utf-8", json: "application/json" };
